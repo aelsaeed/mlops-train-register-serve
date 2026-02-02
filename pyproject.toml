@@ -1,0 +1,25 @@
+[project]
+name = "mlops-train-register-serve"
+version = "0.1.0"
+description = "Mini end-to-end MLOps workflow with MLflow"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
