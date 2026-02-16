@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import mlflow
+from app.main import create_app
 from fastapi.testclient import TestClient
 
-from app.main import create_app
 from mlops_trs.training import TrainConfig, train_model
 
 
@@ -23,6 +23,7 @@ def test_predict_endpoint_contract(tmp_path: Path) -> None:
             experiment_name="test-experiment",
             tracking_uri=tracking_uri,
             artifact_location=artifact_location,
+            dataset_path=None,
         )
     )
 
@@ -36,3 +37,7 @@ def test_predict_endpoint_contract(tmp_path: Path) -> None:
     assert "predictions" in payload
     assert isinstance(payload["predictions"], list)
     assert "model_uri" in payload
+
+    metrics_response = client.get("/metrics")
+    assert metrics_response.status_code == 200
+    assert "app_predict_requests_total" in metrics_response.text

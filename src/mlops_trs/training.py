@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import random
+import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import mlflow
 import mlflow.sklearn
@@ -29,13 +32,23 @@ class TrainConfig:
     experiment_name: str
     tracking_uri: str | None
     artifact_location: str | None
+    dataset_path: str | None
 
 
-def _load_dataset() -> Tuple[pd.DataFrame, pd.Series]:
+def _seed_everything(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+
+
+def _load_dataset(dataset_path: str | None = None) -> tuple[pd.DataFrame, pd.Series]:
+    if dataset_path:
+        frame = pd.read_csv(dataset_path)
+        target = frame["target"]
+        features = frame.drop(columns=["target"])
+        return features, target
+
     dataset = load_iris(as_frame=True)
-    features = dataset.data
-    target = dataset.target
-    return features, target
+    return dataset.data, dataset.target
 
 
 def _build_model(config: TrainConfig) -> Any:
@@ -56,7 +69,25 @@ def _build_model(config: TrainConfig) -> Any:
     raise ValueError(message)
 
 
-def train_model(config: TrainConfig) -> Dict[str, Any]:
+def _build_model_version(config: TrainConfig, features: pd.DataFrame, target: pd.Series) -> str:
+    version_source = "|".join(
+        [
+            str(config.random_seed),
+            str(config.model_type),
+            str(config.n_estimators),
+            str(config.max_depth),
+            str(config.c_value),
+            str(config.dataset_path or "iris"),
+            str(features.shape),
+            str(target.value_counts().to_dict()),
+        ]
+    )
+    version_hash = hashlib.sha1(version_source.encode("utf-8")).hexdigest()[:8]
+    return f"v1-{version_hash}"
+
+
+def train_model(config: TrainConfig) -> dict[str, Any]:
+    _seed_everything(config.random_seed)
     configure_tracking(
         TrackingConfig(
             tracking_uri=config.tracking_uri,
@@ -65,7 +96,7 @@ def train_model(config: TrainConfig) -> Dict[str, Any]:
         )
     )
 
-    features, target = _load_dataset()
+    features, target = _load_dataset(config.dataset_path)
     x_train, x_test, y_train, y_test = train_test_split(
         features,
         target,
@@ -75,8 +106,10 @@ def train_model(config: TrainConfig) -> Dict[str, Any]:
     )
 
     model = _build_model(config)
+    model_version = _build_model_version(config, features, target)
 
     with mlflow.start_run() as run:
+        mlflow.set_tags({"lifecycle": "dev", "model_version": model_version})
         mlflow.log_params(
             {
                 "model_type": config.model_type,
@@ -85,6 +118,7 @@ def train_model(config: TrainConfig) -> Dict[str, Any]:
                 "n_estimators": config.n_estimators,
                 "max_depth": config.max_depth,
                 "c_value": config.c_value,
+                "dataset_path": config.dataset_path or "sklearn_iris",
             }
         )
 
@@ -96,15 +130,19 @@ def train_model(config: TrainConfig) -> Dict[str, Any]:
         mlflow.sklearn.log_model(model, artifact_path="model")
         with tempfile.TemporaryDirectory() as tmp_dir:
             metrics_path = Path(tmp_dir) / "metrics.json"
-            pd.DataFrame(
-                {
-                    "accuracy": [accuracy],
-                    "test_rows": [len(x_test)],
-                }
-            ).to_json(metrics_path, orient="records")
+            pd.DataFrame({"accuracy": [accuracy], "test_rows": [len(x_test)]}).to_json(
+                metrics_path, orient="records"
+            )
             mlflow.log_artifact(str(metrics_path))
 
         run_id = run.info.run_id
+
+    artifact_dir = Path("artifacts")
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    local_model_dir = artifact_dir / f"model_{model_version}"
+    if local_model_dir.exists():
+        shutil.rmtree(local_model_dir)
+    mlflow.sklearn.save_model(sk_model=model, path=str(local_model_dir))
 
     return {
         "run_id": run_id,
@@ -112,4 +150,6 @@ def train_model(config: TrainConfig) -> Dict[str, Any]:
         "model_uri": f"runs:/{run_id}/model",
         "feature_names": list(features.columns),
         "classes": sorted(np.unique(target).tolist()),
+        "model_version": model_version,
+        "local_model_path": str(local_model_dir),
     }

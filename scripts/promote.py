@@ -40,6 +40,8 @@ def main() -> None:
         "name": model_version.name,
         "version": model_version.version,
         "current_stage": model_version.current_stage,
+        "lifecycle_tag": "staging",
+        "promotion": "dev-to-staging",
     }
     print(json.dumps(payload, indent=2))
 

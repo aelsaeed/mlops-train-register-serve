@@ -6,20 +6,34 @@ on:
   pull_request:
 
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
+
       - name: Lint
-        run: |
-          ruff check .
-          mypy .
-      - name: Test
-        run: pytest
+        run: ruff check .
+
+      - name: Typecheck
+        run: PYTHONPATH=src:. mypy .
+
+      - name: Tiny training run
+        run: PYTHONPATH=src:. python train.py --dataset-path data/sample.csv --output artifacts/ci_train_output.json
+
+      - name: Unit tests
+        run: PYTHONPATH=src:. pytest
+
+      - name: Validate docker compose
+        if: ${{ hashFiles('docker-compose.yml') != '' || hashFiles('compose.yml') != '' || hashFiles('compose.yaml') != '' }}
+        run: docker compose config
