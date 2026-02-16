@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import mlflow
+
 from mlops_trs.training import TrainConfig, train_model
 
 
@@ -21,12 +22,14 @@ def test_training_runs(tmp_path: Path) -> None:
             experiment_name="test-experiment",
             tracking_uri=tracking_uri,
             artifact_location=artifact_location,
+            dataset_path=None,
         )
     )
 
     mlflow.set_tracking_uri(tracking_uri)
     run = mlflow.get_run(result["run_id"])
     assert "accuracy" in run.data.metrics
+    assert result["model_version"].startswith("v1-")
 
 
 def test_model_loads(tmp_path: Path) -> None:
@@ -43,6 +46,7 @@ def test_model_loads(tmp_path: Path) -> None:
             experiment_name="test-experiment",
             tracking_uri=tracking_uri,
             artifact_location=artifact_location,
+            dataset_path=None,
         )
     )
 
@@ -67,6 +71,7 @@ def test_train_output_json(tmp_path: Path) -> None:
             experiment_name="test-experiment",
             tracking_uri=tracking_uri,
             artifact_location=artifact_location,
+            dataset_path=None,
         )
     )
     output_path.write_text(json.dumps(result, indent=2))

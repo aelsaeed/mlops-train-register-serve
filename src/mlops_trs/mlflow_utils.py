@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -9,9 +8,9 @@ from mlflow.tracking import MlflowClient
 
 @dataclass(frozen=True)
 class TrackingConfig:
-    tracking_uri: Optional[str]
+    tracking_uri: str | None
     experiment_name: str
-    artifact_location: Optional[str]
+    artifact_location: str | None
 
 
 def configure_tracking(config: TrackingConfig) -> None:

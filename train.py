@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
         "--artifact-location",
         default=os.getenv("MLFLOW_ARTIFACT_LOCATION"),
     )
+    parser.add_argument("--dataset-path", default="data/sample.csv")
     parser.add_argument(
         "--output",
         default="artifacts/train_output.json",
@@ -48,6 +49,7 @@ def main() -> None:
         experiment_name=args.experiment_name,
         tracking_uri=args.tracking_uri,
         artifact_location=args.artifact_location,
+        dataset_path=args.dataset_path,
     )
     result = train_model(config)
 

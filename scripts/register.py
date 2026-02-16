@@ -46,6 +46,7 @@ def main() -> None:
         "version": version.version,
         "run_id": version.run_id,
         "current_stage": version.current_stage,
+        "lifecycle_tag": "dev",
     }
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
