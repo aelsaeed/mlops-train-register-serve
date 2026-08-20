@@ -1,17 +1,73 @@
-version: "3.8"
-
 services:
   mlflow:
-    image: python:3.11-slim
-    working_dir: /mlflow
+    image: ghcr.io/mlflow/mlflow:v3.15.1@sha256:ea84a0b879f08b35a6f22f22b294024413e780b8fc978eecf5f760ac16cc9ce5
+    init: true
     ports:
-      - "5000:5000"
+      - "127.0.0.1:${MLFLOW_PORT:-5000}:5000"
     volumes:
-      - ./mlflow:/mlflow
-    command: >
-      bash -c "pip install --no-cache-dir mlflow==2.12.1
-      && mlflow server
-      --backend-store-uri sqlite:////mlflow/mlflow.db
-      --default-artifact-root /mlflow/artifacts
-      --host 0.0.0.0
-      --port 5000"
+      - mlflow-data:/mlflow/data
+      - mlflow-artifacts:/mlflow/artifacts
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri
+      - sqlite:////mlflow/data/mlflow.db
+      - --serve-artifacts
+      - --artifacts-destination
+      - /mlflow/artifacts
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --allowed-hosts
+      - mlflow:5000,localhost:*,127.0.0.1:*
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2).read()
+      interval: 10s
+      timeout: 3s
+      start_period: 15s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    image: mlops-train-register-serve:local
+    build:
+      context: .
+      target: runtime
+    init: true
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_URI: models:/${MODEL_NAME:-iris-classifier}@champion
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2).read()
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  mlflow-data:
+  mlflow-artifacts:

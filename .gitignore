@@ -6,3 +6,9 @@ mlflow/
 artifacts/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/

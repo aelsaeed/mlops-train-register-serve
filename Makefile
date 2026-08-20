@@ -1,52 +1,73 @@
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
+COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
-.DEFAULT_GOAL := demo
+.DEFAULT_GOAL := help
 
-.PHONY: setup lint typecheck test fmt demo clean smoke mlflow train register promote serve
+.PHONY: help setup lint format-check typecheck test coverage check fmt demo clean smoke mlflow train register promote serve build
+
+help:
+	@echo "setup         Install the package and development tools"
+	@echo "check         Run formatting, lint, types, and tests"
+	@echo "demo          Run train -> register -> gate -> serve -> predict locally"
+	@echo "mlflow        Start the local MLflow UI with Docker Compose"
+	@echo "serve         Serve the current @champion model"
+	@echo "build         Build wheel and source distribution"
 
 setup:
 	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt -r requirements-dev.txt
-	pre-commit install
+	$(PIP) install -c constraints.txt -e ".[dev]"
+	$(PYTHON) -m pre_commit install
 
 lint:
-	PYTHONPATH=src:. ruff check .
+	$(PYTHON) -m ruff check .
+
+format-check:
+	$(PYTHON) -m ruff format --check .
 
 fmt:
-	PYTHONPATH=src:. ruff check --fix .
+	$(PYTHON) -m ruff check --fix .
+	$(PYTHON) -m ruff format .
 
 # keep typecheck separate from lint for clearer CI failures
 typecheck:
-	PYTHONPATH=src:. mypy .
+	$(PYTHON) -m mypy .
 
 test:
-	PYTHONPATH=src:. pytest
+	$(PYTHON) -m pytest -q
+
+coverage:
+	$(PYTHON) -m pytest --cov --cov-report=term-missing
+
+check: format-check lint typecheck coverage
 
 smoke:
 	bash scripts/smoke_test.sh
 
 # 1-minute local path: tiny train -> register -> promote -> serve -> predict
 demo:
-	bash scripts/demo.sh --dry
+	PYTHON_BIN=$(PYTHON) bash scripts/demo.sh --dry
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache
-	rm -rf artifacts/demo artifacts/smoke artifacts/model_v1-*
+	rm -rf artifacts/demo artifacts/e2e artifacts/smoke artifacts/model_v1-* artifacts/model_v2-*
 
 mlflow:
-	docker compose up -d mlflow
+	$(COMPOSE) up -d mlflow
 
 train:
-	PYTHONPATH=src:. $(PYTHON) train.py --dataset-path data/sample.csv --output artifacts/train_output.json
+	$(PYTHON) train.py --dataset-path data/sample.csv --output artifacts/train_output.json
 
 register:
-	PYTHONPATH=src:. $(PYTHON) scripts/register.py
+	$(PYTHON) scripts/register.py --run-file artifacts/train_output.json
 
 promote:
-	PYTHONPATH=src:. $(PYTHON) scripts/promote.py
+	$(PYTHON) scripts/promote.py
 
 serve:
-	MODEL_URI=$${MODEL_URI:-models:/iris-classifier/Staging} \
+	MODEL_URI=$${MODEL_URI:-models:/iris-classifier@champion} \
 		MLFLOW_TRACKING_URI=$${MLFLOW_TRACKING_URI:-sqlite:///artifacts/demo/mlflow.db} \
-		PYTHONPATH=src:. $(PYTHON) -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+		$(PYTHON) -m uvicorn mlops_trs.api:app --host 0.0.0.0 --port $${API_PORT:-8000}
+
+build:
+	$(PYTHON) -m build
