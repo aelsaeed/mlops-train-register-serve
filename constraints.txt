@@ -1,6 +1,6 @@
 # Direct dependencies verified by CI. Transitive dependencies remain platform-resolved.
 fastapi==0.141.1
-mlflow==3.15.1
+mlflow==3.15.2
 numpy==2.4.6; python_version < "3.12"
 numpy==2.5.2; python_version >= "3.12"
 pandas==2.3.3
